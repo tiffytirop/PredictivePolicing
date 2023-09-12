@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<head> 
+  <meta charset="utf-8">
+  <link rel="stylesheet" type="text/css" href="./styles.css">
+</head>
+
+<body>
+<h1 align="center" >Predictive Policing in San Francisco</h1>
+
+
+
+<svg id="svg"></svg>
+
+<div id="wrapper">  
+  <div id="map"></div>
+  <div id="wrapper" align="center">
+    <div class = col-md-4>
+    <div id="para">
+      <p>Select the hour on the slider. Select a day of the week. Hover over the map to see actual crimes and predictions for each zip code. 
+      <hr>
+      
+    </div>
+</div>
+  <input 
+    id="slider" 
+    type="range" 
+    min="0" 
+    max="23" 
+    step="1" 
+    value="11"
+    oninput="putNumerInOutput(this.value)"></input>
+  <output id="output">11</output>
+</div>
+
+<script src="https://d3js.org/d3.v3.min.js"></script>
+<script src="https://d3js.org/topojson.v2.min.js"></script>
+<script>
+
+
+// variables
+
+var width = 1250,
+    height = 440,
+    centered;
+
+var minimum = 0.002740, maximum = 0.621918;
+
+var minimumColor = "#F2D7D5", maximumColor = "#7B241C";
+
+var color = d3.scale.linear()
+    .domain([0.02, 0.60])
+    .range(['yellow', 'red']);
+
+
+var projection = d3.geo.mercator()
+  .scale(140000)
+  // Center the Map in SF
+  .center([-122.42, 37.77])
+  .translate([width / 2, height / 2]);
+
+var path = d3.geo.path()
+  .projection(projection);
+
+// Set svg width & height
+var svg = d3.select('svg')
+  .attr('width', width)
+  .attr('height', height);
+
+// Add background
+svg.append('rect')
+  .attr('class', 'background')
+  .attr('width', width)
+  .attr('height', height);
+
+var g = svg.append('g');
+
+var effectLayer = g.append('g')
+  .classed('effect-layer', true);
+
+var mapLayer = g.append('g')
+  .classed('map-layer', true);
+
+var bigText = g.append('text')
+  .classed('big-text', true)
+  .attr('x', 20)
+  .attr('y', 45);
+
+var features;
+
+var crime_data;
+
+
+var shapeData = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+    j = 1;  // Choose Monday as default
+
+// Create the shape selectors
+var form = d3.select("#wrapper").append("form");
+
+labels = form.selectAll("label")
+    .data(shapeData)
+    .enter()
+    .append("label")
+    .text(function(d) {return d;})
+    .insert("input")
+    .attr({
+      type: "radio",
+      name: "mode",
+      value: function(d) {return d;}
+    })
+    .property("checked", function(d) {return d;})
+    .on("click", updateMap);
+
+
+
+
+
+
+// Load data
+
+d3.json('zipcodes_geo.json', function(error, mapData) {
+  features = mapData.features;
+  // Draw each zip code as a path
+  mapLayer.selectAll('path')
+      .data(features)
+    .enter().append('path')
+      .attr('d', path)
+      .attr('vector-effect', 'non-scaling-stroke')
+      .style('fill', fillFn)
+      .on('mouseover', mouseover)
+      .on('mouseout', mouseout);
+});
+// Load crime data
+    
+var crime_data;
+d3.json("crime_predictions.json" , function(data) {
+  crime_data = data;
+  
+})
+
+
+// Functions
+
+function putNumerInOutput(val) {
+    document.getElementById('output').innerHTML = val,
+    //fillFn();
+        updateMap();
+}
+var zip,
+tmpObj;
+
+// Get zip_code
+function nameFn(d){
+  zip = d.properties.zip
+  return d && d.properties ? 
+
+   dayFn() + " " + hourFn() + ":00" +
+
+   " Zip: " + d.properties.zip_code + "\n" +
+
+   "  Actual: " + crime_data.filter(function(element){ return element.DayOfWeek == dayFn() & element.Hour == hourFn() & element.zip == zip})[0]["Crimes"] + 
+
+  "   Predicted: " + crime_data.filter(function(element){ return element.DayOfWeek == dayFn() & element.Hour == hourFn() & element.zip == zip})[0]["Predicted_mlp"]  : "no data";
+}
+
+// Get day of week
+function dayFn(){
+  for (i = 0; i < labels[0].length; i++) 
+    if (labels[0][i].checked) {
+        return labels[0][i].value
+}}
+// get hour of day
+function hourFn(){
+	return slider.value
+}
+
+// get number of crimes for a zip code
+function getCrimes(d){
+  zip = d ? (d.properties ? (d.properties.zip ? d.properties.zip : zip) : zip) : zip;
+    //zip = d.properties.zip;
+    if(crime_data){
+        tmpObj = (crime_data.filter(function(element){ return element.DayOfWeek == dayFn() & element.Hour == hourFn() & element.zip == zip}) ? (crime_data.filter(function(element){ return element.DayOfWeek == dayFn() & element.Hour == hourFn() & element.zip == zip})[0] ? (crime_data.filter(function(element){ return element.DayOfWeek == dayFn() & element.Hour == hourFn() & element.zip == zip})[0]["Crimes"] ? crime_data.filter(function(element){ return element.DayOfWeek == dayFn() & element.Hour == hourFn() & element.zip == zip})[0]["Crimes"]: null) : null) : null);
+    }
+    return tmpObj ? tmpObj : 0.0;
+}
+
+
+// Get zip code color
+function fillFn(d){
+  return color(getCrimes(d));
+}
+
+function updateMap() {
+    mapLayer.selectAll('path')
+        .style('fill', function(d){return centered && d===centered ? '#D5708B' : fillFn(d);});
+}
+
+
+function mouseover(d){
+  // Highlight hovered zip code
+  d3.select(this).style('fill', 'grey')
+  ;
+  // Draw effects
+  textArt(nameFn(d));
+  getCrimes()
+}
+
+function mouseout(d){
+  // Reset zip code color
+  mapLayer.selectAll('path')
+    .style('fill', function(d){return centered && d===centered ? '#D5708B' : fillFn(d);});
+
+  // Remove effect text
+  effectLayer.selectAll('text').transition()
+    .style('opacity', 0)
+    .remove();
+
+  // Clear zip code name
+  bigText.text('');
+}
+
+
+function textArt(text){
+  // Use random font
+  var fontFamily = 'Helvetica Neue'
+
+  bigText
+    .style('font-family', fontFamily)
+    .text(text);
+
+}
+
+</script>
+</body>
+</html>
